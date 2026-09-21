@@ -18,11 +18,11 @@ import {
   Dices,
 } from 'lucide-react';
 
-const CONTRACT_ADDRESS = '0xcF2d56e4d692Ab9Cec05645CA4197F7FEFB69126';
+const CONTRACT_ADDRESS = '0x8c8c2f831ec7792161ac86b9b159d96315a6cdd4';
 const PAIR_ADDRESS = '0x70f5baa80f63d18255b6eca7273b69ecf828b6b7';
 const DEAD_ADDRESS = '0x000000000000000000000000000000000000dEaD';
 const PANCAKESWAP_URL = `https://pancakeswap.finance/swap?chain=bsc&inputCurrency=0xfa6D9B504848606Eb9aeC04CCc161D169B3f2159&outputCurrency=${CONTRACT_ADDRESS}`;
-const DEXSCREENER_URL = `https://dexscreener.com/bsc/${PAIR_ADDRESS}`;
+const DEXSCREENER_URL = `https://dexscreener.com/bsc/${CONTRACT_ADDRESS}`;
 const BSCSCAN_URL = `https://bscscan.com/token/${CONTRACT_ADDRESS}`;
 const BSCSCAN_BURN_URL = `https://bscscan.com/token/${CONTRACT_ADDRESS}?a=${DEAD_ADDRESS}`;
 const BREW_URL = `https://brew.family/token/?address=${CONTRACT_ADDRESS}`;
@@ -84,12 +84,20 @@ export default function HomePage() {
   const handleManualRefresh = useCallback(async () => {
     setIsLoadingMarket(true);
     try {
-      const res = await fetch(`https://api.dexscreener.com/latest/dex/pairs/bsc/${PAIR_ADDRESS}`, {
+      let res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${CONTRACT_ADDRESS}`, {
         cache: 'no-store',
       });
-      if (!res.ok) throw new Error('API error');
-      const data = await res.json();
-      const pair = data.pairs?.[0] || data.pair;
+      let data = res.ok ? await res.json() : null;
+      let pair = data?.pairs?.[0] || data?.pair;
+
+      if (!pair) {
+        res = await fetch(`https://api.dexscreener.com/latest/dex/pairs/bsc/${PAIR_ADDRESS}`, {
+          cache: 'no-store',
+        });
+        data = res.ok ? await res.json() : null;
+        pair = data?.pairs?.[0] || data?.pair;
+      }
+
       if (pair && pair.priceUsd) {
         setMarket({
           price: pair.priceUsd,
@@ -123,12 +131,20 @@ export default function HomePage() {
 
     async function loadMarket() {
       try {
-        const res = await fetch(`https://api.dexscreener.com/latest/dex/pairs/bsc/${PAIR_ADDRESS}`, {
+        let res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${CONTRACT_ADDRESS}`, {
           cache: 'no-store',
         });
-        if (!res.ok) return;
-        const data = await res.json();
-        const pair = data.pairs?.[0] || data.pair;
+        let data = res.ok ? await res.json() : null;
+        let pair = data?.pairs?.[0] || data?.pair;
+
+        if (!pair) {
+          res = await fetch(`https://api.dexscreener.com/latest/dex/pairs/bsc/${PAIR_ADDRESS}`, {
+            cache: 'no-store',
+          });
+          data = res.ok ? await res.json() : null;
+          pair = data?.pairs?.[0] || data?.pair;
+        }
+
         if (!isCancelled && pair && pair.priceUsd) {
           setMarket({
             price: pair.priceUsd,
