@@ -19,14 +19,16 @@ import {
 } from 'lucide-react';
 
 const CONTRACT_ADDRESS = '0x8c8c2f831ec7792161ac86b9b159d96315a6cdd4';
-const PAIR_ADDRESS = '0x70f5baa80f63d18255b6eca7273b69ecf828b6b7';
+const PAIR_ADDRESS = '0x818cff39475bac9dd5e9a01831d4c4756858e946'; // 777STOCK / WBNB PancakeSwap v3 Pool
 const DEAD_ADDRESS = '0x000000000000000000000000000000000000dEaD';
-const PANCAKESWAP_URL = `https://pancakeswap.finance/swap?chain=bsc&inputCurrency=0xfa6D9B504848606Eb9aeC04CCc161D169B3f2159&outputCurrency=${CONTRACT_ADDRESS}`;
-const DEXSCREENER_URL = `https://dexscreener.com/bsc/${CONTRACT_ADDRESS}`;
+const WBNB_ADDRESS = '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c';
+const PANCAKESWAP_URL = `https://pancakeswap.finance/swap?chain=bsc&inputCurrency=BNB&outputCurrency=${CONTRACT_ADDRESS}`;
+const DEXSCREENER_URL = `https://dexscreener.com/bsc/${PAIR_ADDRESS}`;
+const GECKOTERMINAL_URL = `https://www.geckoterminal.com/bsc/pools/${PAIR_ADDRESS}`;
 const BSCSCAN_URL = `https://bscscan.com/token/${CONTRACT_ADDRESS}`;
 const BSCSCAN_BURN_URL = `https://bscscan.com/token/${CONTRACT_ADDRESS}?a=${DEAD_ADDRESS}`;
-const BREW_URL = `https://brew.family/token/?address=${CONTRACT_ADDRESS}`;
-const TWITTER_URL = 'https://x.com/6stockonbrew';
+const BSCSCAN_POOL_URL = `https://bscscan.com/address/${PAIR_ADDRESS}`;
+const TWITTER_URL = 'https://x.com/777stock_coin';
 
 interface MarketData {
   price: string;
@@ -46,20 +48,20 @@ interface MarketData {
 }
 
 const DEFAULT_MARKET: MarketData = {
-  price: '0.00007605',
-  priceNum: 0.00007605,
+  price: '0.00000100',
+  priceNum: 0.000001,
   changes: {
     m5: 0.0,
-    h1: -5.55,
-    h6: 6.92,
-    h24: -41.87,
+    h1: 0.0,
+    h6: 0.0,
+    h24: 0.0,
   },
-  mcap: 59100,
-  liq: 33000,
-  vol: 59300,
-  buys: 309,
-  sells: 234,
-  lastUpdated: 'Live from DexScreener',
+  mcap: 1000,
+  liq: 1000,
+  vol: 0,
+  buys: 1,
+  sells: 0,
+  lastUpdated: 'Live On-Chain (BSC)',
 };
 
 export default function HomePage() {
@@ -74,53 +76,118 @@ export default function HomePage() {
   const [isSpinning, setIsSpinning] = useState(false);
   const [jackpotMsg, setJackpotMsg] = useState('JACKPOT! 777 Triple Gold!');
 
-  // Burn data
-  const totalStartingSupply = 1000000000; // 1 Billion
-  const [burnedCount, setBurnedCount] = useState(222546120);
-  const remainingSupply = totalStartingSupply - burnedCount;
+  // Burn data from on-chain verification
+  const totalStartingSupply = 1000000000; // 1,000,000,000 (1 Billion)
+  const [burnedCount, setBurnedCount] = useState(0);
+  const [poolSupplyAllocated, setPoolSupplyAllocated] = useState(333300000); // 33.33% in PancakeSwap v3 pool
+  const remainingSupply = Math.max(0, totalStartingSupply - burnedCount);
   const burnedPercent = ((burnedCount / totalStartingSupply) * 100).toFixed(3);
 
-  // Fetch real market data from DexScreener
+  // Function to query on-chain burn stats and market data
   const handleManualRefresh = useCallback(async () => {
     setIsLoadingMarket(true);
     try {
-      let res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${CONTRACT_ADDRESS}`, {
-        cache: 'no-store',
-      });
-      let data = res.ok ? await res.json() : null;
-      let pair = data?.pairs?.[0] || data?.pair;
+      // 1. Fetch on-chain dead address balance via BSC JSON-RPC
+      try {
+        const rpcRes = await fetch('https://bsc-dataseed.bnbchain.org', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'eth_call',
+            params: [
+              {
+                to: CONTRACT_ADDRESS,
+                data: '0x70a08231000000000000000000000000000000000000000000000000000000000000dead',
+              },
+              'latest',
+            ],
+          }),
+        });
+        if (rpcRes.ok) {
+          const rpcData = await rpcRes.json();
+          if (rpcData?.result) {
+            const raw = BigInt(rpcData.result);
+            const inTokens = Number(raw / BigInt('1000000000000000000'));
+            setBurnedCount(inTokens);
+          }
+        }
+      } catch {
+        // RPC fallback continues
+      }
 
-      if (!pair) {
-        res = await fetch(`https://api.dexscreener.com/latest/dex/pairs/bsc/${PAIR_ADDRESS}`, {
+      // 2. Fetch GeckoTerminal pool data
+      try {
+        const geckoRes = await fetch(
+          `https://api.geckoterminal.com/api/v2/networks/bsc/pools/${PAIR_ADDRESS}`,
+          { cache: 'no-store' }
+        );
+        if (geckoRes.ok) {
+          const geckoJson = await geckoRes.json();
+          const attrs = geckoJson?.data?.attributes;
+          if (attrs) {
+            const pUsd = attrs.base_token_price_usd;
+            const priceNum = pUsd ? parseFloat(pUsd) : 0.000001;
+            const changes = attrs.price_change_percentage || {};
+            const txns = attrs.transactions?.h24 || {};
+            setMarket({
+              price: pUsd || '0.00000100',
+              priceNum: priceNum,
+              changes: {
+                m5: parseFloat(changes.m5) || 0,
+                h1: parseFloat(changes.h1) || 0,
+                h6: parseFloat(changes.h6) || 0,
+                h24: parseFloat(changes.h24) || 0,
+              },
+              mcap: attrs.market_cap_usd ? parseFloat(attrs.market_cap_usd) : attrs.fdv_usd ? parseFloat(attrs.fdv_usd) : 1000,
+              liq: attrs.reserve_in_usd ? parseFloat(attrs.reserve_in_usd) : 1000,
+              vol: attrs.volume_usd?.h24 ? parseFloat(attrs.volume_usd.h24) : 0,
+              buys: Number(txns.buys || 1),
+              sells: Number(txns.sells || 0),
+              lastUpdated: `Live from GeckoTerminal · ${new Date().toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+              })}`,
+            });
+            return;
+          }
+        }
+      } catch {
+        // Next fallback
+      }
+
+      // 3. Fetch DexScreener pair data
+      try {
+        const res = await fetch(`https://api.dexscreener.com/latest/dex/pairs/bsc/${PAIR_ADDRESS}`, {
           cache: 'no-store',
         });
-        data = res.ok ? await res.json() : null;
-        pair = data?.pairs?.[0] || data?.pair;
+        const data = res.ok ? await res.json() : null;
+        const pair = data?.pairs?.[0] || data?.pair;
+        if (pair && pair.priceUsd) {
+          setMarket({
+            price: pair.priceUsd,
+            priceNum: parseFloat(pair.priceUsd) || 0.000001,
+            changes: {
+              m5: Number(pair.priceChange?.m5 ?? 0),
+              h1: Number(pair.priceChange?.h1 ?? 0),
+              h6: Number(pair.priceChange?.h6 ?? 0),
+              h24: Number(pair.priceChange?.h24 ?? 0),
+            },
+            mcap: Number(pair.marketCap || pair.fdv || 1000),
+            liq: Number(pair.liquidity?.usd || 1000),
+            vol: Number(pair.volume?.h24 || 0),
+            buys: Number(pair.txns?.h24?.buys || 1),
+            sells: Number(pair.txns?.h24?.sells || 0),
+            lastUpdated: `Live from DexScreener · ${new Date().toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit',
+            })}`,
+          });
+        }
+      } catch {
+        // Fallback stays intact
       }
-
-      if (pair && pair.priceUsd) {
-        setMarket({
-          price: pair.priceUsd,
-          priceNum: parseFloat(pair.priceUsd) || 0.00007605,
-          changes: {
-            m5: Number(pair.priceChange?.m5 ?? 0),
-            h1: Number(pair.priceChange?.h1 ?? -5.55),
-            h6: Number(pair.priceChange?.h6 ?? 6.92),
-            h24: Number(pair.priceChange?.h24 ?? -41.87),
-          },
-          mcap: Number(pair.marketCap || pair.fdv || 59100),
-          liq: Number(pair.liquidity?.usd || 33000),
-          vol: Number(pair.volume?.h24 || 59300),
-          buys: Number(pair.txns?.h24?.buys || 309),
-          sells: Number(pair.txns?.h24?.sells || 234),
-          lastUpdated: `Live from DexScreener · ${new Date().toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit',
-          })}`,
-        });
-      }
-    } catch {
-      // Fallback stays in place
     } finally {
       setIsLoadingMarket(false);
     }
@@ -131,35 +198,94 @@ export default function HomePage() {
 
     async function loadMarket() {
       try {
-        let res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${CONTRACT_ADDRESS}`, {
+        // Query on-chain dead address balance
+        try {
+          const rpcRes = await fetch('https://bsc-dataseed.bnbchain.org', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              id: 1,
+              method: 'eth_call',
+              params: [
+                {
+                  to: CONTRACT_ADDRESS,
+                  data: '0x70a08231000000000000000000000000000000000000000000000000000000000000dead',
+                },
+                'latest',
+              ],
+            }),
+          });
+          if (rpcRes.ok && !isCancelled) {
+            const rpcData = await rpcRes.json();
+            if (rpcData?.result) {
+              const raw = BigInt(rpcData.result);
+              const inTokens = Number(raw / BigInt('1000000000000000000'));
+              setBurnedCount(inTokens);
+            }
+          }
+        } catch {
+          // ignore
+        }
+
+        // Query GeckoTerminal pool
+        try {
+          const geckoRes = await fetch(
+            `https://api.geckoterminal.com/api/v2/networks/bsc/pools/${PAIR_ADDRESS}`,
+            { cache: 'no-store' }
+          );
+          if (geckoRes.ok && !isCancelled) {
+            const geckoJson = await geckoRes.json();
+            const attrs = geckoJson?.data?.attributes;
+            if (attrs && attrs.base_token_price_usd) {
+              setMarket({
+                price: attrs.base_token_price_usd,
+                priceNum: parseFloat(attrs.base_token_price_usd) || 0.000001,
+                changes: {
+                  m5: parseFloat(attrs.price_change_percentage?.m5) || 0,
+                  h1: parseFloat(attrs.price_change_percentage?.h1) || 0,
+                  h6: parseFloat(attrs.price_change_percentage?.h6) || 0,
+                  h24: parseFloat(attrs.price_change_percentage?.h24) || 0,
+                },
+                mcap: attrs.market_cap_usd ? parseFloat(attrs.market_cap_usd) : attrs.fdv_usd ? parseFloat(attrs.fdv_usd) : 1000,
+                liq: attrs.reserve_in_usd ? parseFloat(attrs.reserve_in_usd) : 1000,
+                vol: attrs.volume_usd?.h24 ? parseFloat(attrs.volume_usd.h24) : 0,
+                buys: Number(attrs.transactions?.h24?.buys || 1),
+                sells: Number(attrs.transactions?.h24?.sells || 0),
+                lastUpdated: `Live from GeckoTerminal · ${new Date().toLocaleTimeString([], {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}`,
+              });
+              return;
+            }
+          }
+        } catch {
+          // ignore
+        }
+
+        // Query DexScreener
+        const res = await fetch(`https://api.dexscreener.com/latest/dex/pairs/bsc/${PAIR_ADDRESS}`, {
           cache: 'no-store',
         });
-        let data = res.ok ? await res.json() : null;
-        let pair = data?.pairs?.[0] || data?.pair;
-
-        if (!pair) {
-          res = await fetch(`https://api.dexscreener.com/latest/dex/pairs/bsc/${PAIR_ADDRESS}`, {
-            cache: 'no-store',
-          });
-          data = res.ok ? await res.json() : null;
-          pair = data?.pairs?.[0] || data?.pair;
-        }
+        const data = res.ok ? await res.json() : null;
+        const pair = data?.pairs?.[0] || data?.pair;
 
         if (!isCancelled && pair && pair.priceUsd) {
           setMarket({
             price: pair.priceUsd,
-            priceNum: parseFloat(pair.priceUsd) || 0.00007605,
+            priceNum: parseFloat(pair.priceUsd) || 0.000001,
             changes: {
               m5: Number(pair.priceChange?.m5 ?? 0),
-              h1: Number(pair.priceChange?.h1 ?? -5.55),
-              h6: Number(pair.priceChange?.h6 ?? 6.92),
-              h24: Number(pair.priceChange?.h24 ?? -41.87),
+              h1: Number(pair.priceChange?.h1 ?? 0),
+              h6: Number(pair.priceChange?.h6 ?? 0),
+              h24: Number(pair.priceChange?.h24 ?? 0),
             },
-            mcap: Number(pair.marketCap || pair.fdv || 59100),
-            liq: Number(pair.liquidity?.usd || 33000),
-            vol: Number(pair.volume?.h24 || 59300),
-            buys: Number(pair.txns?.h24?.buys || 309),
-            sells: Number(pair.txns?.h24?.sells || 234),
+            mcap: Number(pair.marketCap || pair.fdv || 1000),
+            liq: Number(pair.liquidity?.usd || 1000),
+            vol: Number(pair.volume?.h24 || 0),
+            buys: Number(pair.txns?.h24?.buys || 1),
+            sells: Number(pair.txns?.h24?.sells || 0),
             lastUpdated: `Live from DexScreener · ${new Date().toLocaleTimeString([], {
               hour: '2-digit',
               minute: '2-digit',
@@ -167,7 +293,7 @@ export default function HomePage() {
           });
         }
       } catch {
-        // Keep initial market data
+        // Keep fallback
       }
     }
 
@@ -357,7 +483,7 @@ export default function HomePage() {
               <span className="inline-flex items-center gap-1.5">
                 <Flame className="w-3.5 h-3.5 text-[#ff7a33]" />
                 <span className="text-[#a89c86]">BURNED:</span>
-                <span className="text-[#ff7a33]">222.55M ({burnedPercent}%)</span>
+                <span className="text-[#ff7a33]">{burnedCount.toLocaleString()} ({burnedPercent}%)</span>
               </span>
 
               <span className="inline-flex items-center gap-1.5">
@@ -384,7 +510,7 @@ export default function HomePage() {
 
               <span className="inline-flex items-center gap-1.5">
                 <span className="text-[#a89c86]">PAIR:</span>
-                <span className="text-[#eec76f]">777STOCK / BREW</span>
+                <span className="text-[#eec76f]">777STOCK / WBNB</span>
               </span>
 
               <span className="inline-flex items-center gap-1.5">
@@ -425,7 +551,7 @@ export default function HomePage() {
           <div className="lg:col-span-7 space-y-6">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#16120b] border border-[#dcb15c]/30 text-[#eec76f] text-xs font-mono-num font-bold uppercase tracking-wider">
               <span className="w-2 h-2 rounded-full bg-[#eec76f] live-pulse" />
-              Freshly Brewed on BNB Chain
+              Live on BNB Smart Chain
             </div>
 
             <h1 className="font-display font-black text-6xl sm:text-7xl lg:text-8xl tracking-tight leading-[0.88] uppercase text-[#f4eee2]">
@@ -435,8 +561,8 @@ export default function HomePage() {
             </h1>
 
             <p className="text-[#a89c86] text-lg sm:text-xl max-w-2xl leading-relaxed font-normal">
-              Born on the <strong className="text-white font-semibold">brew.family</strong> launchpad and
-              paired with BREW on PancakeSwap. Pull the golden lever, back the lucky triple sevens, and trade
+              Launched on <strong className="text-white font-semibold">BNB Smart Chain</strong> and
+              paired with WBNB on PancakeSwap v3. Pull the golden lever, back the lucky triple sevens, and trade
               the only memecoin that turns market volatility into a jackpot run.
             </p>
 
@@ -520,7 +646,7 @@ export default function HomePage() {
                   </div>
                   <div>
                     <h2 className="font-display font-extrabold text-lg text-[#f4eee2] leading-none">
-                      777STOCK / BREW
+                      777STOCK / WBNB
                     </h2>
                     <span className="text-[11px] font-mono-num text-[#a89c86]">
                       PancakeSwap v3 · BSC
@@ -716,10 +842,10 @@ export default function HomePage() {
                 <span className="text-[#eec76f]">Just 777STOCK.</span>
               </h2>
               <p className="text-[#a89c86] text-base leading-relaxed pt-2">
-                Born on the <strong className="text-[#f4eee2]">brew.family</strong> launchpad and listed
-                the same day, 777STOCK trades against BREW on PancakeSwap v3. It&apos;s a community-driven
-                culture coin that pairs the unstoppable luck of triple sevens with the raw momentum of the BNB
-                Chain ecosystem. The chart is the product, and every holder is in the executive suite.
+                Launched on <strong className="text-[#f4eee2]">BNB Smart Chain</strong>, 777STOCK trades
+                directly against WBNB on PancakeSwap v3. It&apos;s a community-driven culture coin that
+                pairs the unstoppable luck of triple sevens with the raw momentum of the BNB Chain ecosystem.
+                The chart is the product, and every holder is in the executive suite.
               </p>
             </div>
 
@@ -728,15 +854,15 @@ export default function HomePage() {
                 {[
                   { label: 'Ticker', value: '$777STOCK', isGold: true },
                   { label: 'Chain', value: 'BNB Smart Chain (BSC)', isGold: false },
-                  {
-                    label: 'Launchpad',
-                    value: 'brew.family',
-                    link: BREW_URL,
-                    isGold: false,
-                  },
-                  { label: 'Pair', value: '777STOCK / BREW', isGold: false },
+                  { label: 'Pair', value: '777STOCK / WBNB', isGold: true },
                   { label: 'DEX', value: 'PancakeSwap v3', isGold: false },
                   { label: 'Total Starting Supply', value: '1,000,000,000', isGold: false },
+                  {
+                    label: 'PancakeSwap v3 Pool',
+                    value: `${PAIR_ADDRESS.slice(0, 6)}...${PAIR_ADDRESS.slice(-4)}`,
+                    link: BSCSCAN_POOL_URL,
+                    isGold: false,
+                  },
                   {
                     label: 'Contract Address',
                     value: `${CONTRACT_ADDRESS.slice(0, 6)}...${CONTRACT_ADDRESS.slice(-4)}`,
@@ -834,8 +960,15 @@ export default function HomePage() {
                   </div>
 
                   <div className="flex justify-between items-center">
-                    <dt className="text-[#a89c86]">Burn Amount:</dt>
-                    <dd className="text-[#f4eee2] font-semibold">222,546,119.74 777STOCK</dd>
+                    <dt className="text-[#a89c86]">Burned Tokens:</dt>
+                    <dd className="text-[#f4eee2] font-semibold">{burnedCount.toLocaleString()} 777STOCK</dd>
+                  </div>
+
+                  <div className="flex justify-between items-center">
+                    <dt className="text-[#a89c86]">Pool Liquidity (v3):</dt>
+                    <dd className="text-[#eec76f] font-semibold">
+                      {poolSupplyAllocated.toLocaleString()} (33.33%)
+                    </dd>
                   </div>
 
                   <div className="flex justify-between items-center">
@@ -853,7 +986,7 @@ export default function HomePage() {
                     rel="noopener noreferrer"
                     className="text-[#eec76f] hover:underline text-xs font-mono-num font-bold flex items-center gap-1"
                   >
-                    <span>View proof on BscScan</span>
+                    <span>View burn proof on BscScan</span>
                     <ArrowUpRight className="w-3.5 h-3.5" />
                   </a>
                 </div>
@@ -936,8 +1069,8 @@ export default function HomePage() {
               How to Buy $777STOCK
             </h2>
             <p className="text-[#a89c86] text-base max-w-xl">
-              777STOCK is paired with BREW, so you can swap BNB directly through PancakeSwap router or swap
-              BREW directly.
+              777STOCK is paired with WBNB on PancakeSwap v3. You can swap BNB directly using the official
+              contract address.
             </p>
           </div>
 
@@ -951,14 +1084,14 @@ export default function HomePage() {
               },
               {
                 step: '02',
-                title: 'Get BNB or BREW',
-                desc: 'Acquire BNB on any exchange and transfer to your wallet. You can swap BNB for BREW on PancakeSwap or let the router swap directly.',
+                title: 'Fund with BNB',
+                desc: 'Acquire BNB on any crypto exchange and transfer to your self-custody wallet address on BNB Smart Chain.',
                 icon: Coins,
               },
               {
                 step: '03',
                 title: 'Swap for $777STOCK',
-                desc: 'Paste the official 777STOCK contract address into PancakeSwap, set slippage to 1-3%, and confirm the transaction.',
+                desc: 'Open PancakeSwap v3, paste the official 777STOCK contract address, set slippage to 1-3%, and confirm the swap.',
                 icon: Layers,
               },
             ].map((st) => {
@@ -1035,6 +1168,11 @@ export default function HomePage() {
                 url: DEXSCREENER_URL,
               },
               {
+                title: 'GeckoTerminal',
+                subtitle: 'Pool Analytics',
+                url: GECKOTERMINAL_URL,
+              },
+              {
                 title: 'PancakeSwap',
                 subtitle: 'Swap 777STOCK',
                 url: PANCAKESWAP_URL,
@@ -1045,14 +1183,9 @@ export default function HomePage() {
                 url: BSCSCAN_URL,
               },
               {
-                title: 'brew.family',
-                subtitle: 'Launchpad',
-                url: BREW_URL,
-              },
-              {
-                title: 'X / Twitter',
-                subtitle: '@6stockonbrew',
-                url: TWITTER_URL,
+                title: 'BscScan Pool',
+                subtitle: 'Liquidity Pool',
+                url: BSCSCAN_POOL_URL,
               },
             ].map((link) => (
               <a
@@ -1116,7 +1249,15 @@ export default function HomePage() {
                 rel="noopener noreferrer"
                 className="hover:text-[#f4eee2] transition-colors"
               >
-                Chart
+                DexScreener
+              </a>
+              <a
+                href={GECKOTERMINAL_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-[#f4eee2] transition-colors"
+              >
+                GeckoTerminal
               </a>
             </div>
           </div>
@@ -1129,7 +1270,7 @@ export default function HomePage() {
           </p>
 
           <div className="pt-4 border-t border-[#1a140d] flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono-num text-[#5a5243]">
-            <span>© 2026 777STOCK · Powered by BNB Chain & brew.family</span>
+            <span>© 2026 777STOCK · Powered by BNB Smart Chain & PancakeSwap v3</span>
             <span>All 7s aligned. Hold the lucky stock.</span>
           </div>
         </div>
