@@ -1,0 +1,6 @@
+{
+  "name": "777STOCK",
+  "description": "777STOCK — The only stock worth holding. Live price, burn tracker, and tokenomics on BNB Chain.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

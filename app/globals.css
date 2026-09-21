@@ -1,0 +1,84 @@
+@import url("https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800;900&family=JetBrains+Mono:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap");
+@import "tailwindcss";
+
+:root {
+  --ground: #000000;
+  --panel: #0c0a07;
+  --panel-card: #120e0a;
+  --line: #2a2318;
+  --line-gold: rgba(220, 177, 92, 0.28);
+  --foam: #f4eee2;
+  --muted: #a89c86;
+  --amber: #eec76f;
+  --amber-ink: #1a1204;
+  --up: #3ecf7a;
+  --down: #ff6b5e;
+  --ember: #ff7a33;
+  --cell: #1a140d;
+}
+
+body {
+  background-color: var(--ground);
+  color: var(--foam);
+  font-family: "Manrope", system-ui, -apple-system, sans-serif;
+  overflow-x: hidden;
+}
+
+.font-display {
+  font-family: "Big Shoulders Display", "Impact", "Arial Narrow", sans-serif;
+}
+
+.font-mono-num {
+  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+
+.gold-gradient {
+  background: linear-gradient(180deg, #f8dc8a 0%, #dcb15c 55%, #b8893d 100%);
+}
+
+.gold-text-gradient {
+  background: linear-gradient(180deg, #fff2c8 0%, #eec76f 45%, #b8893d 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.gold-border {
+  border-color: #382c1b;
+}
+
+.gold-border:hover {
+  border-color: #dcb15c;
+}
+
+@keyframes marquee {
+  0% { transform: translateX(0%); }
+  100% { transform: translateX(-50%); }
+}
+
+.animate-marquee {
+  display: inline-flex;
+  white-space: nowrap;
+  animation: marquee 35s linear infinite;
+}
+
+.animate-marquee:hover {
+  animation-play-state: paused;
+}
+
+@keyframes pulse-live {
+  0% { box-shadow: 0 0 0 0 rgba(62, 207, 122, 0.6); }
+  100% { box-shadow: 0 0 0 8px rgba(62, 207, 122, 0); }
+}
+
+.live-pulse {
+  animation: pulse-live 2s ease-out infinite;
+}
+
+@keyframes smolder {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.9) drop-shadow(0 0 4px rgba(255, 122, 51, 0.8)); }
+}
+
+.cell-part {
+  animation: smolder 1.6s ease-in-out infinite;
+}
