@@ -18,10 +18,11 @@ import {
   Dices,
 } from 'lucide-react';
 
-const CONTRACT_ADDRESS = '0x8c8c2f831ec7792161ac86b9b159d96315a6cdd4';
-const PAIR_ADDRESS = '0x818cff39475bac9dd5e9a01831d4c4756858e946'; // 777STOCK / WBNB PancakeSwap v3 Pool
+const CONTRACT_ADDRESS = '0x150d84c9c517424efc6d16514ed8ae046a130e0d';
+const PAIR_ADDRESS = '0x7b89db92F4d0507E5bf01AF3e8558FFD09717B54'; // 777STOCK / BREW PancakeSwap v3 Pool
 const DEAD_ADDRESS = '0x000000000000000000000000000000000000dEaD';
-const WBNB_ADDRESS = '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c';
+const BREW_ADDRESS = '0xfa6D9B504848606Eb9aeC04CCc161D169B3f2159';
+const BREW_URL = `https://brew.family/token/?address=${CONTRACT_ADDRESS}`;
 const PANCAKESWAP_URL = `https://pancakeswap.finance/swap?chain=bsc&inputCurrency=BNB&outputCurrency=${CONTRACT_ADDRESS}`;
 const DEXSCREENER_URL = `https://dexscreener.com/bsc/${PAIR_ADDRESS}`;
 const GECKOTERMINAL_URL = `https://www.geckoterminal.com/bsc/pools/${PAIR_ADDRESS}`;
@@ -48,20 +49,20 @@ interface MarketData {
 }
 
 const DEFAULT_MARKET: MarketData = {
-  price: '0.00000100',
-  priceNum: 0.000001,
+  price: '0.00000555',
+  priceNum: 0.00000555,
   changes: {
-    m5: 0.0,
-    h1: 0.0,
-    h6: 0.0,
-    h24: 0.0,
+    m5: 0.14,
+    h1: 0.14,
+    h6: 0.14,
+    h24: 0.14,
   },
-  mcap: 1000,
-  liq: 1000,
-  vol: 0,
-  buys: 1,
-  sells: 0,
-  lastUpdated: 'Live On-Chain (BSC)',
+  mcap: 5556,
+  liq: 5546,
+  vol: 1073,
+  buys: 3,
+  sells: 2,
+  lastUpdated: 'Live from DexScreener',
 };
 
 export default function HomePage() {
@@ -76,14 +77,14 @@ export default function HomePage() {
   const [isSpinning, setIsSpinning] = useState(false);
   const [jackpotMsg, setJackpotMsg] = useState('JACKPOT! 777 Triple Gold!');
 
-  // Burn data from on-chain verification
+  // Burn and pool data from on-chain verification
   const totalStartingSupply = 1000000000; // 1,000,000,000 (1 Billion)
   const [burnedCount, setBurnedCount] = useState(0);
-  const [poolSupplyAllocated, setPoolSupplyAllocated] = useState(333300000); // 33.33% in PancakeSwap v3 pool
+  const [poolSupplyAllocated, setPoolSupplyAllocated] = useState(941550663); // 94.15% in PancakeSwap v3 pool
   const remainingSupply = Math.max(0, totalStartingSupply - burnedCount);
   const burnedPercent = ((burnedCount / totalStartingSupply) * 100).toFixed(3);
 
-  // Function to query on-chain burn stats and market data
+  // Function to query on-chain burn stats, pool allocation and market data
   const handleManualRefresh = useCallback(async () => {
     setIsLoadingMarket(true);
     try {
@@ -115,6 +116,38 @@ export default function HomePage() {
         }
       } catch {
         // RPC fallback continues
+      }
+
+      // 1b. Fetch on-chain PancakeSwap v3 pool balance
+      try {
+        const poolRes = await fetch('https://bsc-dataseed.bnbchain.org', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 2,
+            method: 'eth_call',
+            params: [
+              {
+                to: CONTRACT_ADDRESS,
+                data: `0x70a08231000000000000000000000000${PAIR_ADDRESS.slice(2).toLowerCase()}`,
+              },
+              'latest',
+            ],
+          }),
+        });
+        if (poolRes.ok) {
+          const poolData = await poolRes.json();
+          if (poolData?.result) {
+            const raw = BigInt(poolData.result);
+            const inTokens = Number(raw / BigInt('1000000000000000000'));
+            if (inTokens > 0) {
+              setPoolSupplyAllocated(inTokens);
+            }
+          }
+        }
+      } catch {
+        // pool balance fallback
       }
 
       // 2. Fetch GeckoTerminal pool data
@@ -222,6 +255,38 @@ export default function HomePage() {
               const raw = BigInt(rpcData.result);
               const inTokens = Number(raw / BigInt('1000000000000000000'));
               setBurnedCount(inTokens);
+            }
+          }
+        } catch {
+          // ignore
+        }
+
+        // Query on-chain pool balance
+        try {
+          const poolRes = await fetch('https://bsc-dataseed.bnbchain.org', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              id: 2,
+              method: 'eth_call',
+              params: [
+                {
+                  to: CONTRACT_ADDRESS,
+                  data: `0x70a08231000000000000000000000000${PAIR_ADDRESS.slice(2).toLowerCase()}`,
+                },
+                'latest',
+              ],
+            }),
+          });
+          if (poolRes.ok && !isCancelled) {
+            const poolData = await poolRes.json();
+            if (poolData?.result) {
+              const raw = BigInt(poolData.result);
+              const inTokens = Number(raw / BigInt('1000000000000000000'));
+              if (inTokens > 0) {
+                setPoolSupplyAllocated(inTokens);
+              }
             }
           }
         } catch {
@@ -510,7 +575,7 @@ export default function HomePage() {
 
               <span className="inline-flex items-center gap-1.5">
                 <span className="text-[#a89c86]">PAIR:</span>
-                <span className="text-[#eec76f]">777STOCK / WBNB</span>
+                <span className="text-[#eec76f]">777STOCK / BREW</span>
               </span>
 
               <span className="inline-flex items-center gap-1.5">
@@ -561,8 +626,8 @@ export default function HomePage() {
             </h1>
 
             <p className="text-[#a89c86] text-lg sm:text-xl max-w-2xl leading-relaxed font-normal">
-              Launched on <strong className="text-white font-semibold">BNB Smart Chain</strong> and
-              paired with WBNB on PancakeSwap v3. Pull the golden lever, back the lucky triple sevens, and trade
+              Born on the <strong className="text-white font-semibold">brew.family</strong> launchpad and
+              paired with BREW on PancakeSwap v3. Pull the golden lever, back the lucky triple sevens, and trade
               the only memecoin that turns market volatility into a jackpot run.
             </p>
 
@@ -646,7 +711,7 @@ export default function HomePage() {
                   </div>
                   <div>
                     <h2 className="font-display font-extrabold text-lg text-[#f4eee2] leading-none">
-                      777STOCK / WBNB
+                      777STOCK / BREW
                     </h2>
                     <span className="text-[11px] font-mono-num text-[#a89c86]">
                       PancakeSwap v3 · BSC
@@ -843,7 +908,7 @@ export default function HomePage() {
               </h2>
               <p className="text-[#a89c86] text-base leading-relaxed pt-2">
                 Launched on <strong className="text-[#f4eee2]">BNB Smart Chain</strong>, 777STOCK trades
-                directly against WBNB on PancakeSwap v3. It&apos;s a community-driven culture coin that
+                directly against BREW on PancakeSwap v3 (brew.family). It&apos;s a community-driven culture coin that
                 pairs the unstoppable luck of triple sevens with the raw momentum of the BNB Chain ecosystem.
                 The chart is the product, and every holder is in the executive suite.
               </p>
@@ -854,7 +919,8 @@ export default function HomePage() {
                 {[
                   { label: 'Ticker', value: '$777STOCK', isGold: true },
                   { label: 'Chain', value: 'BNB Smart Chain (BSC)', isGold: false },
-                  { label: 'Pair', value: '777STOCK / WBNB', isGold: true },
+                  { label: 'Pair', value: '777STOCK / BREW', isGold: true },
+                  { label: 'Launchpad', value: 'brew.family', link: BREW_URL, isGold: false },
                   { label: 'DEX', value: 'PancakeSwap v3', isGold: false },
                   { label: 'Total Starting Supply', value: '1,000,000,000', isGold: false },
                   {
@@ -967,7 +1033,7 @@ export default function HomePage() {
                   <div className="flex justify-between items-center">
                     <dt className="text-[#a89c86]">Pool Liquidity (v3):</dt>
                     <dd className="text-[#eec76f] font-semibold">
-                      {poolSupplyAllocated.toLocaleString()} (33.33%)
+                      {poolSupplyAllocated.toLocaleString()} ({((poolSupplyAllocated / totalStartingSupply) * 100).toFixed(2)}%)
                     </dd>
                   </div>
 
@@ -1069,7 +1135,7 @@ export default function HomePage() {
               How to Buy $777STOCK
             </h2>
             <p className="text-[#a89c86] text-base max-w-xl">
-              777STOCK is paired with WBNB on PancakeSwap v3. You can swap BNB directly using the official
+              777STOCK is paired with BREW on PancakeSwap v3 (brew.family). You can swap BNB or BREW directly using the official
               contract address.
             </p>
           </div>
@@ -1091,7 +1157,7 @@ export default function HomePage() {
               {
                 step: '03',
                 title: 'Swap for $777STOCK',
-                desc: 'Open PancakeSwap v3, paste the official 777STOCK contract address, set slippage to 1-3%, and confirm the swap.',
+                desc: 'Open PancakeSwap v3 or brew.family, paste the official 777STOCK contract address, set slippage to 1-3%, and confirm the swap.',
                 icon: Layers,
               },
             ].map((st) => {
@@ -1160,7 +1226,7 @@ export default function HomePage() {
             </h2>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
             {[
               {
                 title: 'DexScreener',
@@ -1176,6 +1242,11 @@ export default function HomePage() {
                 title: 'PancakeSwap',
                 subtitle: 'Swap 777STOCK',
                 url: PANCAKESWAP_URL,
+              },
+              {
+                title: 'brew.family',
+                subtitle: 'Token Launchpad',
+                url: BREW_URL,
               },
               {
                 title: 'BscScan',
